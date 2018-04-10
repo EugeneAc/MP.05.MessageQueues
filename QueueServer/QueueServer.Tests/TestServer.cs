@@ -15,7 +15,7 @@
 		public void Init()
 		{
 			var queueName = "testqueue";
-			_statusQueueName = "StatusQueue";
+			_statusQueueName = "testStatusQueue";
             _server = new QueueServer(Directory.GetCurrentDirectory(), queueName, _statusQueueName);
 		    _server.Start();
         }
@@ -30,8 +30,8 @@
 
             var client = new AzureQueueClient("TestClient");
 			client.SendStatusMessage(_statusQueueName, "TestStatusMessage");
-			Assert.IsTrue(File.Exists("StatusMessages.txt"));
-			Thread.Sleep(5000);
+		    Thread.Sleep(5000);
+            Assert.IsTrue(File.Exists("StatusMessages.txt"));
 			var text = File.ReadAllText(@"StatusMessages.txt");
 			Assert.IsTrue(text.Contains("TestStatusMessage"));
         }
