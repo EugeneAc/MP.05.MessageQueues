@@ -4,6 +4,7 @@
     using System.Collections.Generic;
     using System.IO;
     using System.Linq;
+    using System.Text;
     using System.Threading;
 
     using Microsoft.ServiceBus;
@@ -18,13 +19,13 @@
         public AzureQueueClient(string clientUniqueName)
         {
             NamespaceManager namespaceManager = NamespaceManager.Create();
-            var topicName = "SettingsTopic";
+            var topicName = ClientConstants.SettingTopicName;
             try
             {
                 if (namespaceManager.TopicExists(topicName))
                 {
                     if (namespaceManager.SubscriptionExists(topicName, clientUniqueName))
-                    { 
+                    {
                         namespaceManager.DeleteSubscription(topicName, clientUniqueName);
                     }
 
@@ -40,7 +41,7 @@
 
         public bool SendFile(string filePath)
         {
-            return SendFile("FileQueue", filePath, 256000);
+            return SendFile(ClientConstants.FileQueuName, filePath, 256000);
         }
 
         public bool SendFile(string queueName, string filePath, int chunkSize)
@@ -48,12 +49,29 @@
             try
             {
                 var client = QueueClient.Create(queueName);
-                byte[] bytes = File.ReadAllBytes(filePath);
-                var f = CutFile(bytes, chunkSize);
-                foreach (var message in f)
+                var length = new System.IO.FileInfo(filePath).Length;
+                var sendchunk = new byte[chunkSize];
+                using (FileStream fs = File.Open(filePath, FileMode.Open))
                 {
-                    client.Send(message);
+                    for (int i = 0; i <= length / chunkSize; i++)
+                    {
+                        var partCount = new KeyValuePair<string, object>("PartCount", length / chunkSize);
+                        var part = new KeyValuePair<string, object>("Part", i);
+                        var sequenceNumber = new KeyValuePair<string, object>("Sequence", _sequence);
+                        sendchunk = new BinaryReader(fs).ReadBytes(chunkSize);
+                        client.Send(new BrokeredMessage(sendchunk)
+                        {
+                            ContentType = "application/octet-stream",
+                            Properties =
+                                {
+                                    partCount, part, sequenceNumber
+                                }
+                        });
+                       Array.Clear(sendchunk,0,chunkSize);
+                    }
                 }
+
+                _sequence++;
             }
             catch (Exception)
             {
@@ -65,7 +83,7 @@
 
         public bool SendStatusMessage(string message)
         {
-            return SendStatusMessage("StatusQueue", message);
+            return SendStatusMessage(ClientConstants.StatusQueueName, message);
         }
 
         public bool SendStatusMessage(string statusQueueName, string message)
@@ -87,43 +105,21 @@
         {
             var settinsDict = new Dictionary<string, int>();
             var message = _subscibtionClient.Receive(new TimeSpan(1));
-                if (message != null)
-                {
-                    var body = message.GetBody<string>();
-                    if (body == "New Configuration")
-                    { 
-                        var timeoutSetting = (int)message.Properties["Timeout"];
-                        settinsDict.Add("Timeout", timeoutSetting);
-                    }
-                    if (body == "Update Status")
-                    {
-                        settinsDict.Add("StatusUpdate", 1);
-                    }
-                }
-
-            return settinsDict;
-        }
-
-        private List<BrokeredMessage> CutFile(byte[] infile, int chunkSize)
-        {
-            var outList = new List<BrokeredMessage>();
-            var t = infile.Length / chunkSize;
-            for (int i = 0; i <= infile.Length / chunkSize; i++)
+            if (message != null)
             {
-                var arr = infile.Skip(chunkSize * i).Take(chunkSize).ToArray();
-                var partCount = new KeyValuePair<string, object>("PartCount", infile.Length / chunkSize);
-                var part = new KeyValuePair<string, object>("Part", i);
-                var sequenceNumber = new KeyValuePair<string, object>("Sequence", _sequence);
-                outList.Add(
-                    new BrokeredMessage(arr)
-                        {
-                            ContentType = "application/octet-stream",
-                            Properties = { partCount, part, sequenceNumber }
-                        });
+                var body = message.GetBody<string>();
+                if (body == ClientConstants.NewConfigurationMessage)
+                {
+                    var timeoutSetting = (int)message.Properties[ClientConstants.TimeoutSectionName];
+                    settinsDict.Add(ClientConstants.TimeoutSectionName, timeoutSetting);
+                }
+                if (body == ClientConstants.UpdateStatusMessage)
+                {
+                    settinsDict.Add("StatusUpdate", 1);
+                }
             }
 
-            _sequence++;
-            return outList;
+            return settinsDict;
         }
     }
 }

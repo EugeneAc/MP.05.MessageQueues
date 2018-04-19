@@ -14,7 +14,11 @@
 		[TestInitialize]
 		public void Init()
 		{
-			var queueName = "testqueue";
+		    if (File.Exists(@"AzureDocument0.pdf"))
+		    {
+		        File.Delete(@"AzureDocument0.pdf");
+		    }
+            var queueName = "testqueue";
 			_statusQueueName = "testStatusQueue";
             _server = new QueueServer(Directory.GetCurrentDirectory(), queueName, _statusQueueName);
 		    _server.Start();
@@ -43,11 +47,10 @@
 	        {
 	            client.DownloadFile("http://www.pdf995.com/samples/pdf.pdf", "TestFile.pdf");
 	        }
-
 	        var queueclient = new AzureQueueClient("TestClient");
             queueclient.SendFile("testqueue", "TestFile.pdf", 256000);
             Thread.Sleep(10000);
-	        Assert.IsTrue(File.Exists("TestFile.pdf"));
+	        Assert.IsTrue(File.Exists("AzureDocument0.pdf"));
         }
 
 	    [TestMethod]
@@ -61,12 +64,12 @@
 	        File.WriteAllText("Service.config", newtext);
 			Thread.Sleep(1000);
 			
-	        var s = queueclient.ReceiveNewSettings();
-	        var setting = s["Timeout"];
+	        var allSettings = queueclient.ReceiveNewSettings();
+	        var setting = allSettings["Timeout"];
             Assert.IsTrue(setting == 10000);
             
-	        var s2 = queueclient2.ReceiveNewSettings();
-	        var setting2 = s2["Timeout"];
+	        var allSettings2 = queueclient2.ReceiveNewSettings();
+	        var setting2 = allSettings2["Timeout"];
 			Assert.IsTrue(setting2 == 10000);
 		}
     }

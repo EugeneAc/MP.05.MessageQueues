@@ -21,10 +21,10 @@
 		private string _topicName;
 
 	    private TopicClient _topicClient;
-		private string _subscriptionName;
+
 
 		public QueueServer(string saveFilePath)
-			: this(saveFilePath, "FileQueue", "StatusQueue")
+			: this(saveFilePath, ServerConstants.FileQueuName, ServerConstants.StatusQueueName)
 		{
 		}
 
@@ -38,8 +38,8 @@
 			CreateQueue(_statusQueueName);
 
 			NamespaceManager namespaceManager = NamespaceManager.Create();
-			_topicName = "SettingsTopic";
-			_subscriptionName = "SettingsSubscription";
+			_topicName = ServerConstants.SettingTopicName;
+
 
 			if (!namespaceManager.TopicExists(_topicName))
 			{
@@ -49,7 +49,7 @@
 		    _topicClient = TopicClient.Create(_topicName);
             FileSystemWatcher watcher = new FileSystemWatcher();
 			watcher.Path = Directory.GetCurrentDirectory();
-			watcher.Filter = "Service.config";
+		    watcher.Filter = ServerConstants.ConfigFileName;
 			watcher.NotifyFilter = NotifyFilters.LastWrite;
 			watcher.Changed += this.OnChanged;
 			watcher.EnableRaisingEvents = true;
@@ -71,29 +71,27 @@
 
 	    private void OnChanged(object sender, FileSystemEventArgs e)
 	    {
-	        ConfigurationManager.RefreshSection("ServiceConfigurations");
-	        var config = (ServiceConfigurations)ConfigurationManager.GetSection("ServiceConfigurations");
+	        ConfigurationManager.RefreshSection(ServerConstants.ConfigSectionName);
+	        var config = (ServiceConfigurations)ConfigurationManager.GetSection(ServerConstants.ConfigSectionName);
 	        if (config == null)
 	        {
 	            return;
 	        }
 
 	        var timeout = config.TimeoutTime.Duration;
-	        this.SendBroadcastMessage("New Configuration", new Dictionary<string, object>() { { "Timeout", timeout } });
+	        this.SendBroadcastMessage(ServerConstants.NewConfigurationMessage, new Dictionary<string, object>() { { ServerConstants.TimeoutSectionName, timeout } });
 	    }
 
         private void ReceiveStatusMessage()
 		{
 			var client = QueueClient.Create(_statusQueueName, ReceiveMode.ReceiveAndDelete);
-			var statusMessagesFeleName = "StatusMessages.txt";
-
 			while (true)
 			{
 			    var msg = client.Receive(new TimeSpan(1000));
 				if (msg != null)
 				{
 			        var result = msg.GetBody<string>();
-			        File.AppendAllText(statusMessagesFeleName, DateTime.Now.ToString("HH:mm:ss") + " - " + result + Environment.NewLine);
+			        File.AppendAllText(ServerConstants.StatusMessgaesFileName, DateTime.Now.ToString("HH:mm:ss") + " - " + result + Environment.NewLine);
 			    }
 			}
 		}
@@ -122,7 +120,7 @@
 				var firstmessage = client.Receive();
 				if (firstmessage != null)
 				{
-					var partCount = (int)firstmessage.Properties["PartCount"];
+					var partCount = (long)firstmessage.Properties["PartCount"];
 					var partNumber = (int)firstmessage.Properties["Part"];
 					var sequenceNumber = (int)firstmessage.Properties["Sequence"];
 					var bytes = new List<byte>();
